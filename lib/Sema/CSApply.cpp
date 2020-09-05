@@ -7872,6 +7872,37 @@ static Optional<SolutionApplicationTarget> applySolutionToInitialization(
     initType = solution.getType(initializer);
   } else {
     initType = solution.getType(target.getInitializationPattern());
+
+    // DNM HACK: Consider the following example, where 'foo' is only known to
+    // return 'Self' with a base of type Q. References to a covariant 'Self'
+    // are normally replaced with the existential base in
+    // getTypeOfMemberReference, but 'foo' returns 'Self.A' as per its
+    // interface type, so we must keep the 'Self' reference open to allow the
+    // dependent member type to be simplified away. This leads the CS to
+    // assume an opened 'Self' archetype type for 'x' before the initializer
+    // expr is rewritten and the existential resulting from the call is
+    // closed.
+    //
+    // protocol P {
+    //   associatedtype A
+    //   func foo() -> A
+    // }
+    // protocol Q: P where A == Self {}
+    //
+    // func takesQ(arg: Q) {
+    //   let x = arg.foo()
+    // }
+    //
+    if (auto *const openedTy = initType->getAs<OpenedArchetypeType>()) {
+      if (dyn_cast<OpenExistentialExpr>(initializer) &&
+          openedTy->getOpenedExistentialType()->isEqual(
+              solution.getType(initializer))) {
+        auto &cs = solution.getConstraintSystem();
+        cs.setType(target.getInitializationPattern(),
+                   solution.getType(initializer));
+        initType = solution.getType(initializer);
+      }
+    }
   }
 
   {

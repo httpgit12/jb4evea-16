@@ -51,23 +51,24 @@ struct S2: P2 {
 
 let p2: P2 = S2()
 p2.takesSelf(S2()) // expected-error {{member 'takesSelf' cannot be used on value of protocol type 'P2'; use a generic constraint instead}}
-p2.takesAssoc(0) 
+
+// FIXME: (P) is how an opened archetype prints. But should we even be showing
+// argument mismatches on unsupported accesses?
+p2.takesAssoc(0)
 // expected-error@-1 {{member 'takesAssoc' cannot be used on value of protocol type 'P2'; use a generic constraint instead}} 
-// expected-error@-2 {{cannot convert value of type 'Int' to expected argument type 'P2.Q'}}
+// expected-error@-2 {{cannot convert value of type 'Int' to expected argument type '(P2).Q'}}
 p2.takesNestedSelf { _ in } // okay
 p2.takesNestedAssoc { _ in } 
 // expected-error@-1 {{member 'takesNestedAssoc' cannot be used on value of protocol type 'P2'; use a generic constraint instead}}
-// expected-error@-2 {{cannot convert value of type '(_) -> ()' to expected argument type '(P2.Q) -> ()'}}
 
 func takesP2(arg: P2) {
   arg.takesSelf(S2()) // expected-error {{member 'takesSelf' cannot be used on value of protocol type 'P2'; use a generic constraint instead}}
   arg.takesAssoc(0) 
   // expected-error@-1 {{member 'takesAssoc' cannot be used on value of protocol type 'P2'; use a generic constraint instead}} 
-  // expected-error@-2 {{cannot convert value of type 'Int' to expected argument type 'P2.Q'}}
+  // expected-error@-2 {{cannot convert value of type 'Int' to expected argument type '(P2).Q'}}
   arg.takesNestedSelf { _ in } // okay
   arg.takesNestedAssoc { _ in } 
   // expected-error@-1 {{member 'takesNestedAssoc' cannot be used on value of protocol type 'P2'; use a generic constraint instead}}
-  // expected-error@-2 {{cannot convert value of type '(_) -> ()' to expected argument type '(P2.Q) -> ()'}}
 }
 
 takesP2(arg: p2) // okay
@@ -90,14 +91,14 @@ let p3: P3 = S3()
 _ = p3.assocProp // expected-error {{member 'assocProp' cannot be used on value of protocol type 'P3'; use a generic constraint instead}}
 _ = p3[0]
 // expected-error@-1 {{member 'subscript' cannot be used on value of protocol type 'P3'; use a generic constraint instead}}
-// expected-error@-2 {{cannot convert value of type 'Int' to expected argument type 'P3.Q'}}
+// expected-error@-2 {{cannot convert value of type 'Int' to expected argument type '(P3).Q'}}
 _ = p3.selfProp // expected-error {{member 'selfProp' cannot be used on value of protocol type 'P3'; use a generic constraint instead}}
 
 func takesP3(arg: P3) {
   _ = arg.assocProp // expected-error {{member 'assocProp' cannot be used on value of protocol type 'P3'; use a generic constraint instead}}
   _ = arg[0]
   // expected-error@-1 {{member 'subscript' cannot be used on value of protocol type 'P3'; use a generic constraint instead}}
-  // expected-error@-2 {{cannot convert value of type 'Int' to expected argument type 'P3.Q'}}
+  // expected-error@-2 {{cannot convert value of type 'Int' to expected argument type '(P3).Q'}}
   _ = arg.selfProp // expected-error {{member 'selfProp' cannot be used on value of protocol type 'P3'; use a generic constraint instead}} 
 }
 
@@ -126,3 +127,64 @@ _ = p1 as P1 // okay
 _ = p2 as P2 // okay
 _ = p3 as P3 // okay
 _ = p4 as P4 // okay
+
+
+
+// Whether a protocol member can be used with a given existential base type
+// depends on how its interface type is spelled within the context of the base.
+
+class Class {}
+struct Struct<T> {}
+
+protocol P5a where B == Struct<A> {
+  associatedtype A
+  associatedtype B
+  associatedtype C
+
+  func takesAssocA_P5a(_: A)
+  func takesAssocB(_: B)
+  func returnsAssocC() -> C
+}
+protocol P5b: Class, P5a where A == Bool, C == Self {
+  func takesAssocA_P5b(_: A)
+  func takesAssocABadSelf(_: A, _: Self)
+}
+
+func takesP5a(arg: P5a) {
+  // Self reference in invariant position.
+  arg.takesAssocB(true) // (Struct<Self.A>) -> ()
+  // expected-error@-1 {{member 'takesAssocB' cannot be used on value of protocol type 'P5a'; use a generic constraint instead}}
+  // expected-error@-2 {{cannot convert value of type 'Bool' to expected argument type 'Struct<(P5a).A>'}}
+}
+
+func takesP5(arg: P5b) {
+  // OK, A is known to be Bool on P5b.
+  arg.takesAssocA_P5a(true) // (Bool) -> ()
+  arg.takesAssocA_P5b(true) // (Bool) -> ()
+
+  // Self in contravariant position.
+  arg.takesAssocABadSelf(true, arg) // (Bool, Self) -> ()
+  // expected-error@-1 {{member 'takesAssocABadSelf' cannot be used on value of protocol type 'P5b'; use a generic constraint instead}}
+
+  // OK, B is known to be Struct<Bool> on P5b.
+  arg.takesAssocB(Struct<Bool>()) // (Struct<Bool>) -> ()
+
+  // OK, D is in covariant position and known to be Self on P5b.
+  let x1 /*: P5b*/ = arg.returnsAssocC() // () -> Self
+  let x2: P5a = arg.returnsAssocC()
+  let x3 = arg.returnsAssocC()
+  // FIXME: Crash
+  //let x4: Class = arg.returnsAssocD()
+}
+
+protocol P6a where A == Bool {
+  associatedtype A
+
+  func takesA(_: A)
+}
+protocol P6b where A == Never {
+  associatedtype A
+}
+func takesComposition(arg: P6a & P6b) {
+  arg.takesA(true) // FIXME: Handle compositions!
+}

@@ -1640,14 +1640,22 @@ ConstraintSystem::getTypeOfMemberReference(
     auto selfTy = replacements[
       cast<GenericTypeParamType>(outerDC->getSelfInterfaceType()
                                  ->getCanonicalType())];
-    type = type.transform([&](Type t) -> Type {
-      if (t->is<TypeVariableType>())
-        if (t->isEqual(selfTy))
-          return baseObjTy;
-      if (auto *metatypeTy = t->getAs<MetatypeType>())
+    type = type.transformRec([&](TypeBase *t) -> Optional<Type> {
+      if (t->isTypeVariableOrMember()) {
+        if (t->is<TypeVariableType>()) {
+          if (t->isEqual(selfTy))
+            return baseObjTy;
+        } else {
+          // Dependent member types are kept open.
+          return Type(t);
+        }
+      } else if (auto *metatypeTy = t->getAs<MetatypeType>()) {
         if (metatypeTy->getInstanceType()->isEqual(selfTy))
-          return ExistentialMetatypeType::get(baseObjTy);
-      return t;
+          return Type(ExistentialMetatypeType::get(baseObjTy));
+      }
+
+      // Recurse into child nodes.
+      return None;
     });
   }
 
