@@ -903,9 +903,11 @@ swift::matchWitness(WitnessChecker::RequirementEnvironmentCache &reqEnvCache,
         // defining a non-final class conforming to 'Collection' which uses
         // the default witness for 'Collection.Iterator', which is defined
         // as 'IndexingIterator<Self>'.
-        auto selfKind = proto->findProtocolSelfReferences(req,
-                                             /*allowCovariantParameters=*/false,
-                                             /*skipAssocTypes=*/false);
+        const auto selfKind =
+            proto->getASTContext().findExistentialSelfReferences(
+                proto->getDeclaredInterfaceType(), req,
+                /*allowCovariantParameters=*/false,
+                /*skipAssocTypes=*/false);
         if (!selfKind.other) {
           covariantSelf = classDecl;
         }
@@ -3288,9 +3290,10 @@ void ConformanceChecker::checkNonFinalClassWitness(ValueDecl *requirement,
 
   // Check whether this requirement uses Self in a way that might
   // prevent conformance from succeeding.
-  auto selfKind = Proto->findProtocolSelfReferences(requirement,
-                                       /*allowCovariantParameters=*/false,
-                                       /*skipAssocTypes=*/true);
+  const auto selfKind = Proto->getASTContext().findExistentialSelfReferences(
+      Proto->getDeclaredInterfaceType(), requirement,
+      /*allowCovariantParameters=*/false,
+      /*skipAssocTypes=*/true);
 
   if (selfKind.other) {
     // References to Self in a position where subclasses cannot do
@@ -3380,10 +3383,11 @@ void ConformanceChecker::checkNonFinalClassWitness(ValueDecl *requirement,
   // associated types.
   if (auto func = dyn_cast<FuncDecl>(witness)) {
     if (func->getDeclContext()->getExtendedProtocolDecl()) {
-      auto selfKindWithAssocTypes = Proto->findProtocolSelfReferences(
-          requirement,
-          /*allowCovariantParameters=*/false,
-          /*skipAssocTypes=*/false);
+      const auto selfKindWithAssocTypes =
+          Proto->getASTContext().findExistentialSelfReferences(
+              Proto->getDeclaredInterfaceType(), requirement,
+              /*allowCovariantParameters=*/false,
+              /*skipAssocTypes=*/false);
       if (selfKindWithAssocTypes.other &&
           selfKindWithAssocTypes.result) {
         diagnoseOrDefer(requirement, false,

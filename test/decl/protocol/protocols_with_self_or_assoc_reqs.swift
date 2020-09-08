@@ -179,12 +179,53 @@ func takesP5(arg: P5b) {
 
 protocol P6a where A == Bool {
   associatedtype A
-
-  func takesA(_: A)
 }
-protocol P6b where A == Never {
+protocol P6b {
+  associatedtype A
+
+  func takesAssocA(arg: A) -> Self
+}
+func takesP6Composition(arg: P6a & P6b) -> P6a {
+  // OK, A is known to be Bool on P6a & P6b.
+  return arg.takesAssocA(arg: true) // (Bool) -> P6a & P6b
+}
+
+class Class7: P7a {
+  typealias A = Bool
+}
+protocol P7a {
   associatedtype A
 }
-func takesComposition(arg: P6a & P6b) {
-  arg.takesA(true) // FIXME: Handle compositions!
+protocol P7b: P7a {
+  associatedtype B
+
+  func takesAssocA(arg: A)
+}
+func takesP7Composition(arg: P7b & Class7) {
+  // OK, A is known to be Bool on P7b & Class7.
+  arg.takesAssocA(arg: true) // (Bool) -> ()
+}
+
+// FIXME: Check composition requirement signatures.
+protocol P8a where A == Bool {
+  associatedtype A
+  func takesAssocA(_: A)
+}
+protocol P8b where A == Never {
+  associatedtype A
+}
+func takesP8Composition(arg: P8a & P8b) {
+  arg.takesAssocA(true)
+}
+
+// FIXME: Check composition requirement signatures.
+protocol P9a {
+  associatedtype A: Sequence
+  func takesAssocA(_: A)
+}
+protocol P9b where A == Bool {
+  associatedtype A
+}
+func takesP9Composition(arg: P9a & P9b) {
+  arg.takesAssocA(true)
 }
